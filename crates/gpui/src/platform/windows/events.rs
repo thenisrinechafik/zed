@@ -619,20 +619,13 @@ impl WindowsWindowInner {
             let Some(caret_position) = self.retrieve_caret_position() else {
                 return Some(0);
             };
+            mark_ime_active(true);
             {
-                let config = COMPOSITIONFORM {
-                    dwStyle: CFS_POINT,
-                    ptCurrentPos: caret_position,
-                    ..Default::default()
-                };
+                let config = composition_form(caret_position);
                 ImmSetCompositionWindow(ctx, &config as _).ok().log_err();
             }
             {
-                let config = CANDIDATEFORM {
-                    dwStyle: CFS_CANDIDATEPOS,
-                    ptCurrentPos: caret_position,
-                    ..Default::default()
-                };
+                let config = candidate_form(caret_position);
                 ImmSetCandidateWindow(ctx, &config as _).ok().log_err();
             }
             ImmReleaseContext(handle, ctx).ok().log_err();
@@ -655,6 +648,7 @@ impl WindowsWindowInner {
             self.with_input_handler(|input_handler| {
                 input_handler.replace_text_in_range(None, "");
             })?;
+            mark_ime_active(false);
             Some(0)
         } else {
             if lparam & GCS_COMPSTR.0 > 0 {
@@ -673,6 +667,7 @@ impl WindowsWindowInner {
                 self.with_input_handler(|input_handler| {
                     input_handler.replace_text_in_range(None, &comp_result);
                 })?;
+                mark_ime_active(false);
                 return Some(0);
             }
 
@@ -1152,6 +1147,11 @@ impl WindowsWindowInner {
     }
 
     fn handle_input_language_changed(&self) -> Option<isize> {
+        mark_ime_active(false);
+        let mut lock = self.state.borrow_mut();
+        lock.pending_surrogate = None;
+        lock.last_reported_modifiers = None;
+        drop(lock);
         unsafe {
             PostMessageW(
                 Some(self.platform_window_handle),

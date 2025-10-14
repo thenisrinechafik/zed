@@ -39,6 +39,7 @@ if ($RunClippy) {
 }
 
 Invoke-Cargo -Args @('check', '--workspace') -LogName 'cargo-check.log'
+Invoke-Cargo -Args @('build', '-p', 'gpui', '--example', 'win_smoke', '--features', 'win-smoke') -LogName 'cargo-build-win-smoke.log'
 
 if (-not $SkipTests) {
     $testArgs = @('test', '--workspace', '--no-fail-fast')
@@ -46,6 +47,11 @@ if (-not $SkipTests) {
         $testArgs += @('--exclude', $crate)
     }
     Invoke-Cargo -Args $testArgs -LogName 'cargo-test.log'
+}
+
+$gpuLog = Join-Path $env:LOCALAPPDATA 'Zed\logs\gpu'
+if (Test-Path $gpuLog) {
+    Copy-Item -Path $gpuLog -Destination (Join-Path $LogDir 'gpu') -Recurse -Force
 }
 
 Write-Host "Windows build pipeline finished" -ForegroundColor Green

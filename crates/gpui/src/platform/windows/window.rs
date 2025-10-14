@@ -49,6 +49,7 @@ pub struct WindowsWindowState {
     pub hovered: bool,
 
     pub renderer: DirectXRenderer,
+    pub renderer_config: WindowsRendererConfig,
 
     pub click_state: ClickState,
     pub system_settings: WindowsSystemSettings,
@@ -86,6 +87,7 @@ impl WindowsWindowState {
         min_size: Option<Size<Pixels>>,
         appearance: WindowAppearance,
         disable_direct_composition: bool,
+        renderer_config: WindowsRendererConfig,
     ) -> Result<Self> {
         let scale_factor = {
             let monitor_dpi = unsafe { GetDpiForWindow(hwnd) } as f32;
@@ -105,7 +107,12 @@ impl WindowsWindowState {
         };
         let border_offset = WindowBorderOffset::default();
         let restore_from_minimized = None;
-        let renderer = DirectXRenderer::new(hwnd, directx_devices, disable_direct_composition)
+        let renderer = DirectXRenderer::new(
+            hwnd,
+            directx_devices,
+            disable_direct_composition,
+            renderer_config.clone(),
+        )
             .context("Creating DirectX renderer")?;
         let callbacks = Callbacks::default();
         let input_handler = None;
@@ -137,6 +144,7 @@ impl WindowsWindowState {
             system_key_handled,
             hovered,
             renderer,
+            renderer_config,
             click_state,
             system_settings,
             current_cursor,
@@ -216,6 +224,7 @@ impl WindowsWindowInner {
             context.min_size,
             context.appearance,
             context.disable_direct_composition,
+            context.renderer_config.clone(),
         )?);
 
         Ok(Rc::new_cyclic(|this| Self {
@@ -348,6 +357,7 @@ struct WindowCreateContext {
     appearance: WindowAppearance,
     disable_direct_composition: bool,
     directx_devices: DirectXDevices,
+    renderer_config: WindowsRendererConfig,
 }
 
 impl WindowsWindow {
@@ -367,6 +377,7 @@ impl WindowsWindow {
             platform_window_handle,
             disable_direct_composition,
             directx_devices,
+            renderer_config,
         } = creation_info;
         register_window_class(icon);
         let hide_title_bar = params
@@ -427,6 +438,7 @@ impl WindowsWindow {
             appearance,
             disable_direct_composition,
             directx_devices,
+            renderer_config,
         };
         let creation_result = unsafe {
             CreateWindowExW(

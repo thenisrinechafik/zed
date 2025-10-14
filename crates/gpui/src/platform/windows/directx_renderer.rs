@@ -5,6 +5,10 @@ use std::{
 
 use ::util::ResultExt;
 use anyhow::{Context, Result};
+#[cfg(feature = "dx-dred")]
+use std::fs::File;
+#[cfg(feature = "dx-dred")]
+use std::io::Write;
 use windows::{
     Win32::{
         Foundation::HWND,
@@ -26,6 +30,8 @@ use crate::{
     *,
 };
 
+use super::renderer::{clamp_swapchain_extent, HdrMode, WindowsRendererConfig};
+
 pub(crate) const DISABLE_DIRECT_COMPOSITION: &str = "GPUI_DISABLE_DIRECT_COMPOSITION";
 const RENDER_TARGET_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 // This configuration is used for MSAA rendering on paths only, and it's guaranteed to be supported by DirectX 11.
@@ -45,6 +51,10 @@ pub(crate) struct DirectXRenderer {
     pipelines: DirectXRenderPipelines,
     direct_composition: Option<DirectComposition>,
     font_info: &'static FontInfo,
+    config: WindowsRendererConfig,
+    composition_active: bool,
+    hdr_active: bool,
+    using_flip_model: bool,
 }
 
 /// Direct3D objects
@@ -128,34 +138,37 @@ impl DirectXRenderer {
         hwnd: HWND,
         directx_devices: &DirectXDevices,
         disable_direct_composition: bool,
+        config: WindowsRendererConfig,
     ) -> Result<Self> {
-        if disable_direct_composition {
-            log::info!("Direct Composition is disabled.");
+        let composition_allowed = config.composition_enabled(disable_direct_composition);
+        if !composition_allowed {
+            log::info!(target: "gpu.windows", "DirectComposition disabled for this window");
         }
 
-        let devices = DirectXRendererDevices::new(directx_devices, disable_direct_composition)
+        let devices = DirectXRendererDevices::new(directx_devices, !composition_allowed)
             .context("Creating DirectX devices")?;
         let atlas = Arc::new(DirectXAtlas::new(&devices.device, &devices.device_context));
 
-        let resources = DirectXResources::new(&devices, 1, 1, hwnd, disable_direct_composition)
-            .context("Creating DirectX resources")?;
+        let (resources, composition_active, using_flip_model) =
+            DirectXResources::new(&devices, 1, 1, hwnd, composition_allowed)
+                .context("Creating DirectX resources")?;
         let globals = DirectXGlobalElements::new(&devices.device)
             .context("Creating DirectX global elements")?;
         let pipelines = DirectXRenderPipelines::new(&devices.device)
             .context("Creating DirectX render pipelines")?;
 
-        let direct_composition = if disable_direct_composition {
-            None
-        } else {
+        let direct_composition = if composition_active {
             let composition = DirectComposition::new(devices.dxgi_device.as_ref().unwrap(), hwnd)
                 .context("Creating DirectComposition")?;
             composition
                 .set_swap_chain(&resources.swap_chain)
                 .context("Setting swap chain for DirectComposition")?;
             Some(composition)
+        } else {
+            None
         };
 
-        Ok(DirectXRenderer {
+        let mut renderer = DirectXRenderer {
             hwnd,
             atlas,
             devices,
@@ -164,12 +177,127 @@ impl DirectXRenderer {
             pipelines,
             direct_composition,
             font_info: Self::get_font_info(),
-        })
+            config,
+            composition_active,
+            hdr_active: false,
+            using_flip_model,
+        };
+
+        renderer.configure_hdr();
+
+        #[cfg(feature = "dx-dred")]
+        renderer.initialize_dred();
+
+        if composition_allowed && !renderer.composition_active {
+            log::warn!(
+                target: "gpu.windows",
+                "DirectComposition creation failed; falling back to immediate blit"
+            );
+        }
+        if !renderer.using_flip_model {
+            log::info!(
+                target: "gpu.windows",
+                "Swap chain configured with bitblt fallback"
+            );
+        }
+
+        Ok(renderer)
     }
 
     pub(crate) fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
         self.atlas.clone()
     }
+
+    fn configure_hdr(&mut self) {
+        let desired = self.config.hdr_mode();
+        let hdr_available = self.detect_hdr_support();
+        let should_enable = desired.should_enable(hdr_available);
+        if should_enable == self.hdr_active {
+            return;
+        }
+
+        match self.resources.swap_chain.cast::<IDXGISwapChain3>() {
+            Ok(chain) => {
+                let color_space = if should_enable {
+                    DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
+                } else {
+                    DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709
+                };
+                match unsafe { chain.SetColorSpace1(color_space) } {
+                    Ok(_) => {
+                        self.hdr_active = should_enable;
+                        if should_enable {
+                            log::info!(
+                                target: "gpu.windows",
+                                "Enabled HDR swap chain (mode: {desired})"
+                            );
+                        } else {
+                            log::info!(
+                                target: "gpu.windows",
+                                "Reverted to SDR swap chain"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        self.hdr_active = false;
+                        if should_enable {
+                            log::warn!(
+                                target: "gpu.windows",
+                                "Failed to enable HDR color space: {err:?}"
+                            );
+                        }
+                    }
+                }
+                if should_enable && !hdr_available {
+                    log::warn!(
+                        target: "gpu.windows",
+                        "HDR requested but unavailable on this output"
+                    );
+                }
+            }
+            Err(err) => {
+                log::warn!(
+                    target: "gpu.windows",
+                    "Unable to query swap chain for HDR support: {err:?}"
+                );
+            }
+        }
+    }
+
+    fn detect_hdr_support(&self) -> bool {
+        match self.resources.swap_chain.cast::<IDXGISwapChain3>() {
+            Ok(chain) => {
+                let mut support = 0u32;
+                if unsafe {
+                    chain.CheckColorSpaceSupport(
+                        DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+                        &mut support,
+                    )
+                }
+                .is_ok()
+                {
+                    return support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT.0 != 0;
+                }
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
+    #[cfg(feature = "dx-dred")]
+    fn initialize_dred(&self) {
+        if !self.config.dred_enabled() {
+            return;
+        }
+        if let Some(path) = self.config.dred_dump_path() {
+            if let Ok(mut file) = File::create(&path) {
+                let _ = writeln!(file, "DirectX DRED diagnostics initialized at {:?}", path);
+            }
+        }
+    }
+
+    #[cfg(not(feature = "dx-dred"))]
+    fn initialize_dred(&self) {}
 
     fn pre_draw(&self) -> Result<()> {
         update_buffer(
@@ -246,25 +374,27 @@ impl DirectXRenderer {
             ManuallyDrop::drop(&mut self.devices);
         }
 
-        let devices = DirectXRendererDevices::new(directx_devices, disable_direct_composition)
+        let composition_allowed = self.config.composition_enabled(disable_direct_composition);
+
+        let devices = DirectXRendererDevices::new(directx_devices, !composition_allowed)
             .context("Recreating DirectX devices")?;
-        let resources = DirectXResources::new(
+        let (resources, composition_active, using_flip_model) = DirectXResources::new(
             &devices,
             self.resources.width,
             self.resources.height,
             self.hwnd,
-            disable_direct_composition,
+            composition_allowed,
         )?;
         let globals = DirectXGlobalElements::new(&devices.device)?;
         let pipelines = DirectXRenderPipelines::new(&devices.device)?;
 
-        let direct_composition = if disable_direct_composition {
-            None
-        } else {
+        let direct_composition = if composition_active {
             let composition =
                 DirectComposition::new(devices.dxgi_device.as_ref().unwrap(), self.hwnd)?;
             composition.set_swap_chain(&resources.swap_chain)?;
             Some(composition)
+        } else {
+            None
         };
 
         self.atlas
@@ -274,6 +404,10 @@ impl DirectXRenderer {
         self.globals = globals;
         self.pipelines = pipelines;
         self.direct_composition = direct_composition;
+        self.composition_active = composition_active;
+        self.using_flip_model = using_flip_model;
+
+        self.configure_hdr();
 
         unsafe {
             self.devices
@@ -316,8 +450,10 @@ impl DirectXRenderer {
     }
 
     pub(crate) fn resize(&mut self, new_size: Size<DevicePixels>) -> Result<()> {
-        let width = new_size.width.0.max(1) as u32;
-        let height = new_size.height.0.max(1) as u32;
+        let (width, height) = clamp_swapchain_extent(
+            new_size.width.0.max(1) as u32,
+            new_size.height.0.max(1) as u32,
+        );
         if self.resources.width == width && self.resources.height == height {
             return Ok(());
         }
@@ -353,6 +489,8 @@ impl DirectXRenderer {
                 .device_context
                 .OMSetRenderTargets(Some(&self.resources.render_target_view), None);
         }
+
+        self.configure_hdr();
 
         Ok(())
     }
@@ -658,17 +796,31 @@ impl DirectXResources {
         width: u32,
         height: u32,
         hwnd: HWND,
-        disable_direct_composition: bool,
-    ) -> Result<ManuallyDrop<Self>> {
-        let swap_chain = if disable_direct_composition {
-            create_swap_chain(&devices.dxgi_factory, &devices.device, hwnd, width, height)?
-        } else {
-            create_swap_chain_for_composition(
+        composition_allowed: bool,
+    ) -> Result<(ManuallyDrop<Self>, bool, bool)> {
+        let (width, height) = clamp_swapchain_extent(width, height);
+        let (swap_chain, composition_active, using_flip_model) = if composition_allowed {
+            match create_swap_chain_for_composition(
                 &devices.dxgi_factory,
                 &devices.device,
                 width,
                 height,
-            )?
+            ) {
+                Ok(chain) => (chain, true, true),
+                Err(err) => {
+                    log::warn!(
+                        target: "gpu.windows",
+                        "DirectComposition swap chain unsupported ({err:?}); falling back"
+                    );
+                    let (chain, using_flip) =
+                        create_swap_chain(&devices.dxgi_factory, &devices.device, hwnd, width, height)?;
+                    (chain, false, using_flip)
+                }
+            }
+        } else {
+            let (chain, using_flip) =
+                create_swap_chain(&devices.dxgi_factory, &devices.device, hwnd, width, height)?;
+            (chain, false, using_flip)
         };
 
         let (
@@ -682,18 +834,22 @@ impl DirectXResources {
         ) = create_resources(devices, &swap_chain, width, height)?;
         set_rasterizer_state(&devices.device, &devices.device_context)?;
 
-        Ok(ManuallyDrop::new(Self {
-            swap_chain,
-            render_target,
-            render_target_view,
-            path_intermediate_texture,
-            path_intermediate_msaa_texture,
-            path_intermediate_msaa_view,
-            path_intermediate_srv,
-            viewport,
-            width,
-            height,
-        }))
+        Ok((
+            ManuallyDrop::new(Self {
+                swap_chain,
+                render_target,
+                render_target_view,
+                path_intermediate_texture,
+                path_intermediate_msaa_texture,
+                path_intermediate_msaa_view,
+                path_intermediate_srv,
+                viewport,
+                width,
+                height,
+            }),
+            composition_active,
+            using_flip_model,
+        ))
     }
 
     #[inline]
@@ -1050,7 +1206,7 @@ fn create_swap_chain(
     hwnd: HWND,
     width: u32,
     height: u32,
-) -> Result<IDXGISwapChain1> {
+) -> Result<(IDXGISwapChain1, bool)> {
     use windows::Win32::Graphics::Dxgi::DXGI_MWA_NO_ALT_ENTER;
 
     let desc = DXGI_SWAP_CHAIN_DESC1 {
@@ -1069,10 +1225,24 @@ fn create_swap_chain(
         AlphaMode: DXGI_ALPHA_MODE_IGNORE,
         Flags: 0,
     };
-    let swap_chain =
-        unsafe { dxgi_factory.CreateSwapChainForHwnd(device, hwnd, &desc, None, None) }?;
+    let result = unsafe { dxgi_factory.CreateSwapChainForHwnd(device, hwnd, &desc, None, None) };
+    let swap_chain = match result {
+        Ok(chain) => chain,
+        Err(err) => {
+            log::info!(
+                target: "gpu.windows",
+                "Flip model swap chain unavailable ({err:?}); retrying with bitblt"
+            );
+            let fallback_desc = DXGI_SWAP_CHAIN_DESC1 {
+                SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
+                ..desc
+            };
+            unsafe { dxgi_factory.CreateSwapChainForHwnd(device, hwnd, &fallback_desc, None, None) }?
+        }
+    };
     unsafe { dxgi_factory.MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER) }?;
-    Ok(swap_chain)
+    let using_flip = swap_chain.GetDesc1()?.SwapEffect == DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    Ok((swap_chain, using_flip))
 }
 
 #[inline]

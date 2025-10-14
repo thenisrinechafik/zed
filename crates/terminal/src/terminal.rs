@@ -5,6 +5,8 @@ pub use alacritty_terminal;
 mod pty_info;
 mod terminal_hyperlinks;
 pub mod terminal_settings;
+#[cfg(windows)]
+mod windows_lifecycle;
 
 use alacritty_terminal::{
     Term,
@@ -27,6 +29,8 @@ use alacritty_terminal::{
 };
 use anyhow::{Context as _, Result, bail};
 use log::trace;
+#[cfg(windows)]
+use windows_lifecycle::ConptyLifecycle;
 
 use futures::{
     FutureExt,
@@ -592,6 +596,8 @@ impl TerminalBuilder {
             terminal_type: TerminalType::Pty {
                 pty_tx: Notifier(pty_tx),
                 info: pty_info,
+                #[cfg(windows)]
+                lifecycle: ConptyLifecycle::new(),
             },
             completion_tx,
             term,
@@ -807,6 +813,8 @@ enum TerminalType {
     Pty {
         pty_tx: Notifier,
         info: PtyProcessInfo,
+        #[cfg(windows)]
+        lifecycle: ConptyLifecycle,
     },
     DisplayOnly,
 }
@@ -959,6 +967,10 @@ impl Terminal {
                 self.write_to_pty(format(color).into_bytes());
             }
             AlacTermEvent::ChildExit(error_code) => {
+                #[cfg(windows)]
+                if let TerminalType::Pty { lifecycle, .. } = &self.terminal_type {
+                    lifecycle.on_exit(error_code.map(|status| status as i32));
+                }
                 self.register_task_finished(Some(error_code), cx);
             }
         }
@@ -984,8 +996,19 @@ impl Terminal {
 
                 self.last_content.terminal_bounds = new_bounds;
 
-                if let TerminalType::Pty { pty_tx, .. } = &self.terminal_type {
-                    pty_tx.0.send(Msg::Resize(new_bounds.into())).ok();
+                let cols = self.last_content.terminal_bounds.num_columns() as u16;
+                let lines = self.last_content.terminal_bounds.num_lines() as u16;
+                let window_size = WindowSize {
+                    num_cols: cols,
+                    num_lines: lines,
+                    cell_width: f32::from(self.last_content.terminal_bounds.cell_width()) as u16,
+                    cell_height: f32::from(self.last_content.terminal_bounds.line_height()) as u16,
+                };
+
+                if let TerminalType::Pty { pty_tx, #[cfg(windows)] lifecycle, .. } = &self.terminal_type {
+                    #[cfg(windows)]
+                    lifecycle.on_resize(cols, lines);
+                    pty_tx.0.send(Msg::Resize(window_size)).ok();
                 }
 
                 term.resize(new_bounds);

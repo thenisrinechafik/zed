@@ -28,13 +28,16 @@ pub(crate) struct VSyncProvider {
 }
 
 impl VSyncProvider {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(enabled: bool) -> Option<Self> {
+        if !enabled {
+            return None;
+        }
         let interval = get_dwm_interval()
             .context("Failed to get DWM interval")
             .log_err()
             .unwrap_or(DEFAULT_VSYNC_INTERVAL);
         let f = Box::new(|| unsafe { DwmFlush().is_ok() });
-        Self { interval, f }
+        Some(Self { interval, f })
     }
 
     pub(crate) fn wait_for_vsync(&self) {

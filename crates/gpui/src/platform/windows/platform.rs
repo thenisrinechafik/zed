@@ -40,6 +40,7 @@ pub(crate) struct WindowsPlatform {
     drop_target_helper: IDropTargetHelper,
     handle: HWND,
     disable_direct_composition: bool,
+    renderer_config: WindowsRendererConfig,
 }
 
 struct WindowsPlatformInner {
@@ -146,6 +147,7 @@ impl WindowsPlatform {
         };
         let icon = load_icon().unwrap_or_default();
         let windows_version = WindowsVersion::new().context("Error retrieve windows version")?;
+        let renderer_config = WindowsRendererConfig::detect(windows_version);
 
         Ok(Self {
             inner,
@@ -158,6 +160,7 @@ impl WindowsPlatform {
             disable_direct_composition,
             windows_version,
             drop_target_helper,
+            renderer_config,
         })
     }
 
@@ -191,6 +194,7 @@ impl WindowsPlatform {
             platform_window_handle: self.handle,
             disable_direct_composition: self.disable_direct_composition,
             directx_devices: (*self.inner.state.borrow().directx_devices).clone(),
+            renderer_config: self.renderer_config.clone(),
         }
     }
 
@@ -238,15 +242,22 @@ impl WindowsPlatform {
     }
 
     fn begin_vsync_thread(&self) {
+        if !self.renderer_config.vsync_enabled() {
+            log::info!(target: "gpu.windows", "VSync disabled via configuration");
+            return;
+        }
         let mut directx_device = (*self.inner.state.borrow().directx_devices).clone();
         let platform_window: SafeHwnd = self.handle.into();
         let validation_number = self.inner.validation_number;
         let all_windows = Arc::downgrade(&self.raw_window_handles);
         let text_system = Arc::downgrade(&self.text_system);
+        let vsync_enabled = self.renderer_config.vsync_enabled();
         std::thread::Builder::new()
             .name("VSyncProvider".to_owned())
             .spawn(move || {
-                let vsync_provider = VSyncProvider::new();
+                let Some(vsync_provider) = VSyncProvider::new(vsync_enabled) else {
+                    return;
+                };
                 loop {
                     vsync_provider.wait_for_vsync();
                     if check_device_lost(&directx_device.device) {
@@ -826,6 +837,7 @@ pub(crate) struct WindowCreationInfo {
     pub(crate) platform_window_handle: HWND,
     pub(crate) disable_direct_composition: bool,
     pub(crate) directx_devices: DirectXDevices,
+    pub(crate) renderer_config: WindowsRendererConfig,
 }
 
 struct PlatformWindowCreateContext {

@@ -904,7 +904,12 @@ nonminimal_bool = "allow"
 [workspace.metadata.windows_port]
 # Tracks workspace-wide feature wiring used for Windows bring-up.
 feature = "windows_port"
-crates = ["gpui/windows-manifest"]
+crates = [
+    "gpui/windows-manifest",
+    "gpui/dx-composition",
+    "gpui/dx-dred",
+    "gpui/win-smoke",
+]
 
 [workspace.metadata.cargo-machete]
 ignored = [
