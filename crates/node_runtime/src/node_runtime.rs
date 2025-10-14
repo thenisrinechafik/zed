@@ -20,6 +20,9 @@ use std::{
 use util::ResultExt;
 use util::archive::extract_zip;
 
+#[cfg(all(target_os = "windows", feature = "win-shell-adapters"))]
+pub mod windows_support;
+
 const NODE_CA_CERTS_ENV_VAR: &str = "NODE_EXTRA_CA_CERTS";
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

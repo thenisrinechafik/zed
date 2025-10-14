@@ -7,6 +7,9 @@ use std::{
 };
 use util::{ResultExt, paths::SanitizedPath};
 
+#[cfg(all(target_os = "windows", feature = "win-longpaths"))]
+use crate::windows_paths;
+
 use crate::{PathEvent, PathEventKind, Watcher};
 
 pub struct FsWatcher {
@@ -73,8 +76,16 @@ impl Watcher for FsWatcher {
             }
         }
 
-        let root_path = SanitizedPath::new_arc(path);
-        let path: Arc<std::path::Path> = path.into();
+        #[cfg(all(target_os = "windows", feature = "win-longpaths"))]
+        let (root_path, path): (Arc<SanitizedPath>, Arc<std::path::Path>) = {
+            let normalized = windows_paths::to_win_long_path(path);
+            (SanitizedPath::new_arc(&normalized), normalized.into())
+        };
+        #[cfg(not(all(target_os = "windows", feature = "win-longpaths")))]
+        let (root_path, path): (Arc<SanitizedPath>, Arc<std::path::Path>) = {
+            let root = SanitizedPath::new_arc(path);
+            (root, path.into())
+        };
 
         #[cfg(target_os = "windows")]
         let mode = notify::RecursiveMode::Recursive;

@@ -1,4 +1,6 @@
 mod encrypted_password;
+#[cfg(all(target_os = "windows", feature = "win-askpass-pipe"))]
+mod windows_pipe;
 
 pub use encrypted_password::{EncryptedPassword, IKnowWhatIAmDoingAndIHaveReadTheDocs};
 
@@ -194,6 +196,11 @@ impl PasswordProxy {
         executor: BackgroundExecutor,
     ) -> Result<Self> {
         let temp_dir = tempfile::Builder::new().prefix("zed-askpass").tempdir()?;
+        #[cfg(all(target_os = "windows", feature = "win-askpass-pipe"))]
+        let pipe_endpoint = windows_pipe::unique_pipe_name();
+        #[cfg(all(target_os = "windows", feature = "win-askpass-pipe"))]
+        let askpass_socket = std::path::PathBuf::from(&pipe_endpoint);
+        #[cfg(not(all(target_os = "windows", feature = "win-askpass-pipe")))]
         let askpass_socket = temp_dir.path().join("askpass.sock");
         let askpass_script_path = temp_dir.path().join(ASKPASS_SCRIPT_NAME);
         let current_exec =
@@ -208,32 +215,64 @@ impl PasswordProxy {
         let askpass_script = generate_askpass_script(&askpass_program, &askpass_socket);
         let _task = executor.spawn(async move {
             maybe!(async move {
+                #[cfg(all(target_os = "windows", feature = "win-askpass-pipe"))]
+                let listener =
+                    windows_pipe::NamedPipeListener::bind(pipe_endpoint.clone())
+                        .context("creating askpass pipe")?;
+                #[cfg(not(all(target_os = "windows", feature = "win-askpass-pipe")))]
                 let listener =
                     UnixListener::bind(&askpass_socket).context("creating askpass socket")?;
 
-                while let Ok((mut stream, _)) = listener.accept().await {
-                    let mut buffer = Vec::new();
-                    let mut reader = BufReader::new(&mut stream);
-                    if reader.read_until(b'\0', &mut buffer).await.is_err() {
-                        buffer.clear();
-                    }
-                    let prompt = String::from_utf8_lossy(&buffer).into_owned();
-                    let password = get_password(prompt).await;
-                    match password {
-                        ControlFlow::Continue(password) => {
-                            if let Ok(password) = password
-                                && let Ok(decrypted) =
-                                    password.decrypt(IKnowWhatIAmDoingAndIHaveReadTheDocs)
-                            {
-                                stream.write_all(decrypted.as_bytes()).await.log_err();
+                #[cfg(all(target_os = "windows", feature = "win-askpass-pipe"))]
+                {
+                    use smol::io::BufReader;
+                    while let Ok(mut stream) = listener.accept().await {
+                        let mut buffer = Vec::new();
+                        let mut reader = BufReader::new(&mut stream);
+                        if reader.read_until(b'\0', &mut buffer).await.is_err() {
+                            buffer.clear();
+                        }
+                        let prompt = String::from_utf8_lossy(&buffer).into_owned();
+                        let password = get_password(prompt).await;
+                        match password {
+                            ControlFlow::Continue(password) => {
+                                if let Ok(password) = password
+                                    && let Ok(decrypted) =
+                                        password.decrypt(IKnowWhatIAmDoingAndIHaveReadTheDocs)
+                                {
+                                    stream.write_all(decrypted.as_bytes()).await.log_err();
+                                }
+                            }
+                            ControlFlow::Break(()) => {
+                                std::future::pending::<()>().await;
                             }
                         }
-                        ControlFlow::Break(()) => {
-                            // note: we expect the caller to drop this task when it's done.
-                            // We need to keep the stream open until the caller is done to avoid
-                            // spurious errors from ssh.
-                            std::future::pending::<()>().await;
-                            drop(stream);
+                    }
+                }
+                #[cfg(not(all(target_os = "windows", feature = "win-askpass-pipe")))]
+                {
+                    use smol::io::BufReader;
+                    while let Ok((mut stream, _)) = listener.accept().await {
+                        let mut buffer = Vec::new();
+                        let mut reader = BufReader::new(&mut stream);
+                        if reader.read_until(b'\0', &mut buffer).await.is_err() {
+                            buffer.clear();
+                        }
+                        let prompt = String::from_utf8_lossy(&buffer).into_owned();
+                        let password = get_password(prompt).await;
+                        match password {
+                            ControlFlow::Continue(password) => {
+                                if let Ok(password) = password
+                                    && let Ok(decrypted) =
+                                        password.decrypt(IKnowWhatIAmDoingAndIHaveReadTheDocs)
+                                {
+                                    stream.write_all(decrypted.as_bytes()).await.log_err();
+                                }
+                            }
+                            ControlFlow::Break(()) => {
+                                std::future::pending::<()>().await;
+                                drop(stream);
+                            }
                         }
                     }
                 }
@@ -281,6 +320,15 @@ pub fn main(socket: &str) {
     use std::io::{self, Read, Write};
     use std::process::exit;
 
+    #[cfg(all(target_os = "windows", feature = "win-askpass-pipe"))]
+    let mut stream = match windows_pipe::connect_blocking(socket) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!("Error connecting to pipe {}: {}", socket, err);
+            exit(1);
+        }
+    };
+    #[cfg(not(all(target_os = "windows", feature = "win-askpass-pipe")))]
     let mut stream = match UnixStream::connect(socket) {
         Ok(stream) => stream,
         Err(err) => {

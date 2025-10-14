@@ -909,6 +909,12 @@ crates = [
     "gpui/dx-composition",
     "gpui/dx-dred",
     "gpui/win-smoke",
+    "askpass/win-askpass-pipe",
+    "util/win-shell-adapters",
+    "fs/win-longpaths",
+    "extension_host/win-extension-fs",
+    "auto_update/win-updater",
+    "auto_update_helper/win-updater",
 ]
 
 [workspace.metadata.cargo-machete]

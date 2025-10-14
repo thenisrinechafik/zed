@@ -4,6 +4,9 @@ mod mac_watcher;
 #[cfg(not(target_os = "macos"))]
 pub mod fs_watcher;
 
+#[cfg(all(target_os = "windows", feature = "win-longpaths"))]
+mod windows_paths;
+
 use anyhow::{Context as _, Result, anyhow};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use ashpd::desktop::trash;

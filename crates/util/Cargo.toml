@@ -16,6 +16,7 @@ doctest = true
 
 [features]
 test-support = ["git2", "rand", "util_macros"]
+win-shell-adapters = []
 
 [dependencies]
 anyhow.workspace = true

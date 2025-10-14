@@ -13,6 +13,10 @@ name = "auto_update_helper"
 path = "src/auto_update_helper.rs"
 doctest = false
 
+[features]
+default = []
+win-updater = []
+
 [dependencies]
 anyhow.workspace = true
 log.workspace = true

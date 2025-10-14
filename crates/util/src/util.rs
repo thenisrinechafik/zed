@@ -14,6 +14,8 @@ pub mod size;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test;
 pub mod time;
+#[cfg(all(target_os = "windows", feature = "win-shell-adapters"))]
+pub mod windows_shell_adapters;
 
 use anyhow::{Context as _, Result};
 use futures::Future;

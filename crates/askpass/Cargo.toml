@@ -11,6 +11,10 @@ workspace = true
 [lib]
 path = "src/askpass.rs"
 
+[features]
+default = []
+win-askpass-pipe = []
+
 [dependencies]
 anyhow.workspace = true
 futures.workspace = true
@@ -25,6 +29,7 @@ zeroize.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
+uuid.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["log"]

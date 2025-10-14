@@ -12,6 +12,10 @@ workspace = true
 path = "src/auto_update.rs"
 doctest = false
 
+[features]
+default = []
+win-updater = []
+
 [dependencies]
 anyhow.workspace = true
 client.workspace = true
