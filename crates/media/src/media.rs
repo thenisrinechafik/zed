@@ -210,6 +210,9 @@ pub mod core_media {
     }
 }
 
+#[cfg(all(feature = "win-collab-audio", target_os = "windows"))]
+pub mod windows_audio;
+
 #[cfg(target_os = "macos")]
 pub mod core_video {
     #![allow(non_snake_case)]

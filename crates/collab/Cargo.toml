@@ -16,6 +16,7 @@ name = "collab"
 [features]
 sqlite = ["sea-orm/sqlx-sqlite", "sqlx/sqlite"]
 test-support = ["sqlite"]
+win-collab = []
 
 [dependencies]
 anyhow.workspace = true

@@ -47,11 +47,19 @@ if (-not $SkipTests) {
         $testArgs += @('--exclude', $crate)
     }
     Invoke-Cargo -Args $testArgs -LogName 'cargo-test.log'
+
+    Invoke-Cargo -Args @('test', '-p', 'platform', '--tests', '--features', 'win-ipc', '--no-fail-fast') -LogName 'cargo-test-platform.log'
+    Invoke-Cargo -Args @('test', '-p', 'git', '--tests', '--features', 'win-git', '--no-fail-fast') -LogName 'cargo-test-git.log'
+    Invoke-Cargo -Args @('test', '-p', 'collab', '--tests', '--features', 'win-collab', '--no-fail-fast') -LogName 'cargo-test-collab.log'
+    Invoke-Cargo -Args @('test', '-p', 'media', '--tests', '--features', 'win-collab-audio', '--no-fail-fast') -LogName 'cargo-test-media.log'
+    Invoke-Cargo -Args @('test', '-p', 'bench-windows', '--tests', '--features', 'win-perf', '--no-fail-fast') -LogName 'cargo-test-perf.log'
 }
 
-$gpuLog = Join-Path $env:LOCALAPPDATA 'Zed\logs\gpu'
-if (Test-Path $gpuLog) {
-    Copy-Item -Path $gpuLog -Destination (Join-Path $LogDir 'gpu') -Recurse -Force
+foreach ($subdir in @('gpu', 'ipc', 'git', 'collab', 'perf')) {
+    $logPath = Join-Path $env:LOCALAPPDATA "Zed\logs\$subdir"
+    if (Test-Path $logPath) {
+        Copy-Item -Path $logPath -Destination (Join-Path $LogDir $subdir) -Recurse -Force
+    }
 }
 
 Write-Host "Windows build pipeline finished" -ForegroundColor Green

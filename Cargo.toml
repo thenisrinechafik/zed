@@ -124,6 +124,7 @@ members = [
     "crates/outline",
     "crates/outline_panel",
     "crates/panel",
+    "crates/platform",
     "crates/paths",
     "crates/picker",
     "crates/prettier",
@@ -198,6 +199,7 @@ members = [
     "crates/worktree",
     "crates/x_ai",
     "crates/zed",
+    "bench/windows",
     "crates/zed_actions",
     "crates/zed_env_vars",
     "crates/zeta",
@@ -915,6 +917,11 @@ crates = [
     "extension_host/win-extension-fs",
     "auto_update/win-updater",
     "auto_update_helper/win-updater",
+    "platform/win-ipc",
+    "git/win-git",
+    "collab/win-collab",
+    "media/win-collab-audio",
+    "bench-windows/win-perf",
 ]
 
 [workspace.metadata.cargo-machete]

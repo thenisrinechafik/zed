@@ -7,6 +7,8 @@ pub mod llm;
 pub mod migrations;
 pub mod rpc;
 pub mod seed;
+#[cfg(all(feature = "win-collab", target_os = "windows"))]
+pub mod windows;
 
 #[cfg(test)]
 mod tests;

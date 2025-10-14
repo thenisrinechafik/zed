@@ -1,0 +1,38 @@
+name: Windows Performance Gates
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  perf:
+    runs-on: [self-32vcpu-windows-2022]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Prepare shared cargo directories
+        shell: pwsh
+        run: |
+          $RunnerDir = Split-Path -Parent $env:RUNNER_WORKSPACE
+          "RUSTUP_HOME=$RunnerDir\.rustup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_HOME=$RunnerDir\.cargo" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PATH=$RunnerDir\.cargo\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install toolchain
+        shell: pwsh
+        run: pwsh scripts/win/setup.ps1 -CI
+
+      - name: Run Windows perf harness
+        shell: pwsh
+        run: |
+          cargo test -p bench-windows --features win-perf --no-fail-fast
+
+      - name: Upload perf results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-perf-${{ github.run_id }}
+          path: bench/windows/results.json
+          if-no-files-found: warn

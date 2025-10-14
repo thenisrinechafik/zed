@@ -1,0 +1,46 @@
+[package]
+name = "platform"
+edition.workspace = true
+version = "0.1.0"
+publish = false
+license = "GPL-3.0-or-later"
+authors = ["Zed Team <hi@zed.dev>"]
+
+[features]
+default = []
+win-ipc = ["dep:anyhow", "dep:log", "dep:release_channel", "dep:uuid"]
+
+[dependencies]
+anyhow = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+release_channel = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(target_os = "windows")'.features]
+win-ipc = ["dep:windows"]
+
+[dev-dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+release_channel = { workspace = true }
+uuid = { workspace = true }
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Memory",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }

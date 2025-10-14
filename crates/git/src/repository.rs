@@ -2,6 +2,8 @@ use crate::commit::parse_git_diff_name_status;
 use crate::stash::GitStash;
 use crate::status::{GitStatus, StatusCode};
 use crate::{Oid, SHORT_SHA_LENGTH};
+#[cfg(all(feature = "win-git", target_os = "windows"))]
+use crate::windows;
 use anyhow::{Context as _, Result, anyhow, bail};
 use collections::HashMap;
 use futures::future::BoxFuture;
@@ -560,6 +562,10 @@ impl RealGitRepository {
         let any_git_binary_path = system_git_binary_path.clone().or(bundled_git_binary_path)?;
         let workdir_root = dotgit_path.parent()?;
         let repository = git2::Repository::open(workdir_root).log_err()?;
+        #[cfg(all(feature = "win-git", target_os = "windows"))]
+        if let Err(err) = windows::configure_repository(&repository) {
+            log::warn!("windows git: failed to apply repo defaults: {err:#}");
+        }
         Some(Self {
             repository: Arc::new(Mutex::new(repository)),
             system_git_binary_path,
@@ -1915,7 +1921,14 @@ impl GitBinary {
             working_directory,
             executor,
             index_file_path: None,
-            envs: HashMap::default(),
+            envs: {
+                let mut envs = HashMap::default();
+                #[cfg(all(feature = "win-git", target_os = "windows"))]
+                {
+                    envs.extend(crate::windows::credential_env_overrides());
+                }
+                envs
+            },
         }
     }
 

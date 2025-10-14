@@ -1,5 +1,7 @@
 pub mod blame;
 pub mod commit;
+#[cfg(all(feature = "win-git", target_os = "windows"))]
+pub mod windows;
 mod hosting_provider;
 mod remote;
 pub mod repository;

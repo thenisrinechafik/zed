@@ -809,7 +809,7 @@ impl Server {
             tracing::info!("connection opened");
 
             let user_agent = format!("Zed Server/{}", env!("CARGO_PKG_VERSION"));
-            let http_client = match ReqwestClient::user_agent(&user_agent) {
+            let http_client = match build_http_client(&user_agent) {
                 Ok(http_client) => Arc::new(http_client),
                 Err(error) => {
                     tracing::error!(?error, "failed to create HTTP client");
@@ -1064,6 +1064,16 @@ impl Server {
             peer: &self.peer,
         }
     }
+}
+
+#[cfg(all(feature = "win-collab", target_os = "windows"))]
+fn build_http_client(user_agent: &str) -> anyhow::Result<ReqwestClient> {
+    crate::windows::http_client_for_user_agent(user_agent)
+}
+
+#[cfg(not(all(feature = "win-collab", target_os = "windows")))]
+fn build_http_client(user_agent: &str) -> anyhow::Result<ReqwestClient> {
+    ReqwestClient::user_agent(user_agent)
 }
 
 impl Deref for ConnectionPoolGuard<'_> {

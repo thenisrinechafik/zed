@@ -13,9 +13,13 @@ workspace = true
 path = "src/media.rs"
 doctest = false
 
+[features]
+win-collab-audio = ["cpal"]
+
 [dependencies]
 anyhow.workspace = true
 workspace-hack.workspace = true
+cpal = { version = "0.16", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation.workspace = true
