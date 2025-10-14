@@ -461,37 +461,48 @@ jobs:
       needs.job_spec.outputs.run_tests == 'true'
     runs-on: [self-32vcpu-windows-2022]
     steps:
-      - name: Environment Setup
-        run: |
-          $RunnerDir = Split-Path -Parent $env:RUNNER_WORKSPACE
-          Write-Output `
-            "RUSTUP_HOME=$RunnerDir\.rustup" `
-            "CARGO_HOME=$RunnerDir\.cargo" `
-            "PATH=$RunnerDir\.cargo\bin;$env:PATH" `
-          >> $env:GITHUB_ENV
-
       - name: Checkout repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           clean: false
+
+      - name: Prepare shared cargo directories
+        shell: pwsh
+        run: |
+          $RunnerDir = Split-Path -Parent $env:RUNNER_WORKSPACE
+          "RUSTUP_HOME=$RunnerDir\.rustup" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_HOME=$RunnerDir\.cargo" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PATH=$RunnerDir\.cargo\bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Prepare Windows toolchain
+        shell: pwsh
+        run: pwsh scripts/win/setup.ps1 -CI -StaticCRT
+
+      - name: Cache dependencies
+        uses: swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
+        with:
+          shared-key: windows-msvc
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Configure CI
         run: |
           New-Item -ItemType Directory -Path "./../.cargo" -Force
           Copy-Item -Path "./.cargo/ci-config.toml" -Destination "./../.cargo/config.toml"
 
-      - name: cargo clippy
-        run: |
-          .\script\clippy.ps1
-
-      - name: Run tests
-        uses: ./.github/actions/run_tests_windows
-
-      - name: Build Zed
-        run: cargo build
+      - name: Windows build and test pipeline
+        shell: pwsh
+        run: pwsh scripts/win/build.ps1 -RunClippy -StaticCRT
 
       - name: Limit target directory size
         run: ./script/clear-target-dir-if-larger-than.ps1 250
+
+      - name: Upload Windows logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-ci-logs-${{ github.run_id }}
+          path: target/win-ci-logs
+          if-no-files-found: ignore
 
       - name: Clean CI config file
         if: always()

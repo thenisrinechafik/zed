@@ -901,6 +901,11 @@ large_enum_variant = "allow"
 # Boolean expressions can be hard to read, requiring only the minimal form gets in the way
 nonminimal_bool = "allow"
 
+[workspace.metadata.windows_port]
+# Tracks workspace-wide feature wiring used for Windows bring-up.
+feature = "windows_port"
+crates = ["gpui/windows-manifest"]
+
 [workspace.metadata.cargo-machete]
 ignored = [
     "bindgen",

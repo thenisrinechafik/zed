@@ -18,6 +18,10 @@ path = "src/zed-main.rs"
 name = "zed"
 path = "src/main.rs"
 
+[features]
+default = []
+windows_port = ["gpui/windows-manifest"]
+
 [dependencies]
 acp_tools.workspace = true
 activity_indicator.workspace = true
@@ -72,7 +76,6 @@ gpui = { workspace = true, features = [
     "wayland",
     "x11",
     "font-kit",
-    "windows-manifest",
 ] }
 gpui_tokio.workspace = true
 

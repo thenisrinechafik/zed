@@ -12,8 +12,12 @@ perf-compare = ["run", "--profile", "release-fast", "-p", "perf", "--config", "t
 rustflags = [
     "--cfg",
     "windows_slim_errors",        # This cfg will reduce the size of `windows::core::Error` from 16 bytes to 4 bytes
+]
+
+[target.'cfg(all(target_os = "windows", env("ZED_STATIC_CRT")))']
+rustflags = [
     "-C",
-    "target-feature=+crt-static", # This fixes the linking issue when compiling livekit on Windows
+    "target-feature=+crt-static", # Enable opt-in static CRT linkage when required
 ]
 
 [env]
