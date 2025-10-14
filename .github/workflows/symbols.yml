@@ -1,0 +1,18 @@
+name: upload-symbols
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  symbols:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release binaries
+        run: cargo build --release --features windows_port
+      - name: Build crashops support
+        run: cargo check -p crashops --features win-crashops
+      - name: Upload PDBs
+        run: echo "Uploading PDBs" # Placeholder for symbol upload tooling

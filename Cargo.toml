@@ -44,6 +44,7 @@ members = [
     "crates/component",
     "crates/context_server",
     "crates/copilot",
+    "crates/crashops",
     "crates/crashes",
     "crates/credentials_provider",
     "crates/dap",
@@ -199,6 +200,7 @@ members = [
     "crates/worktree",
     "crates/x_ai",
     "crates/zed",
+    "crates/zed_cli",
     "bench/windows",
     "crates/zed_actions",
     "crates/zed_env_vars",
@@ -283,6 +285,7 @@ component = { path = "crates/component" }
 context_server = { path = "crates/context_server" }
 copilot = { path = "crates/copilot" }
 crashes = { path = "crates/crashes" }
+crashops = { path = "crates/crashops" }
 credentials_provider = { path = "crates/credentials_provider" }
 crossbeam = "0.8.4"
 dap = { path = "crates/dap" }
@@ -435,6 +438,7 @@ workspace = { path = "crates/workspace" }
 worktree = { path = "crates/worktree" }
 x_ai = { path = "crates/x_ai" }
 zed = { path = "crates/zed" }
+zed_cli = { path = "crates/zed_cli" }
 zed_actions = { path = "crates/zed_actions" }
 zed_env_vars = { path = "crates/zed_env_vars" }
 zeta = { path = "crates/zeta" }
@@ -917,11 +921,15 @@ crates = [
     "extension_host/win-extension-fs",
     "auto_update/win-updater",
     "auto_update_helper/win-updater",
+    "auto_update/win-updates-final",
+    "auto_update_helper/win-updates-final",
     "platform/win-ipc",
     "git/win-git",
     "collab/win-collab",
     "media/win-collab-audio",
     "bench-windows/win-perf",
+    "crashops/win-crashops",
+    "zed_cli/win-release",
 ]
 
 [workspace.metadata.cargo-machete]

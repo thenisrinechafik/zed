@@ -1,0 +1,40 @@
+name: release-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        required: true
+        type: choice
+        description: Release channel
+        options:
+          - Stable
+          - Preview
+          - Nightly
+      version:
+        required: true
+        description: Release version
+      release_notes_path:
+        required: false
+        description: Path to markdown release notes
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Package
+        run: pwsh scripts/win/package.ps1 -Channel ${{ inputs.channel }} -Version ${{ inputs.version }} -ReleaseNotesPath ${{ inputs.release_notes_path }}
+      - name: Sign
+        run: pwsh scripts/win/sign.ps1 -Artifacts dist/windows/out/${{ inputs.channel }}
+      - name: Verify
+        run: pwsh scripts/win/verify.ps1 -Artifacts dist/windows/out/${{ inputs.channel }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zed-${{ inputs.channel }}-${{ inputs.version }}
+          path: dist/windows/out/${{ inputs.channel }}

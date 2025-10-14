@@ -64,3 +64,13 @@ pub fn init(tx: mpsc::UnboundedSender<Event>) {
 }
 
 static TELEMETRY_QUEUE: OnceLock<mpsc::UnboundedSender<Event>> = OnceLock::new();
+
+/// Common labels for Windows telemetry payloads.
+pub fn default_labels(channel: &str, version: &str, build_id: &str) -> std::collections::HashMap<String, serde_json::Value> {
+    std::collections::HashMap::from([
+        ("os".to_string(), serde_json::Value::String("windows".into())),
+        ("channel".to_string(), serde_json::Value::String(channel.to_string())),
+        ("version".to_string(), serde_json::Value::String(version.to_string())),
+        ("build_id".to_string(), serde_json::Value::String(build_id.to_string())),
+    ])
+}

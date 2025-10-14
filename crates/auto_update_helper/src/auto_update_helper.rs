@@ -4,6 +4,8 @@
 mod dialog;
 #[cfg(target_os = "windows")]
 mod updater;
+#[cfg(all(target_os = "windows", feature = "win-updates-final"))]
+mod windows;
 
 #[cfg(target_os = "windows")]
 fn main() {

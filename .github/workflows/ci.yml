@@ -833,6 +833,25 @@ jobs:
       # excludes the final package to only cache dependencies
       cachix-filter: "-zed-editor-[0-9.]*-nightly"
 
+  windows-rc:
+    name: Windows RC feature check
+    runs-on: windows-latest
+    needs: [job_spec]
+    if: github.repository_owner == 'zed-industries' && needs.job_spec.outputs.run_tests == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Check editor features
+        run: cargo check -p zed --features windows_port
+      - name: Check updater features
+        run: cargo check -p auto_update --features "win-updater win-updates-final"
+      - name: Check crashops crate
+        run: cargo check -p crashops --features win-crashops
+      - name: Check CLI onboarding
+        run: cargo check -p zed_cli --features win-release
+
   bundle-windows-x64:
     timeout-minutes: 120
     name: Create a Windows installer

@@ -16,6 +16,7 @@ doctest = false
 [features]
 default = []
 win-updater = []
+win-updates-final = []
 
 [dependencies]
 anyhow.workspace = true

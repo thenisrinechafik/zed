@@ -1,3 +1,8 @@
+#[cfg(any(feature = "win-updater", feature = "win-updates-final"))]
+pub mod platform;
+#[cfg(all(target_os = "windows", feature = "win-updates-final"))]
+mod windows;
+
 use anyhow::{Context as _, Result};
 use client::{Client, TelemetrySettings};
 use db::RELEASE_CHANNEL;

@@ -1,0 +1,18 @@
+[package]
+name = "zed_cli"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+license = "GPL-3.0-or-later"
+
+[features]
+default = []
+win-release = []
+
+[dependencies]
+anyhow.workspace = true
+telemetry.workspace = true
+workspace-hack.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true

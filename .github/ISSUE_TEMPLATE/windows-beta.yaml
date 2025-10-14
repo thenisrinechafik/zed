@@ -1,0 +1,40 @@
+name: "Windows Beta Feedback"
+description: "Report an issue from the Windows beta program"
+labels:
+  - area/windows
+  - beta
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the Windows beta! Please include the logs bundle created with `scripts/win/collect-logs.ps1`.
+  - type: input
+    id: version
+    attributes:
+      label: Zed version
+      placeholder: Stable 1.0.0-beta1
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs bundle path
+      description: Upload the archive produced by collect-logs.ps1
